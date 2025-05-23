@@ -1,0 +1,9 @@
+## Interface: 11403
+## Title: Zindure's Unit Frames
+## Notes: Custom party/raid frames with LibSharedMedia
+## Version: 1.0
+## SavedVariablesPerCharacter: ZUF_Settings
+
+libs\LibStub\LibStub.lua
+libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua
+zuf.lua
