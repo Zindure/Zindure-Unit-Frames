@@ -56,7 +56,12 @@ local function HideBlizzardFrames()
             frame:Hide()
         end
     end
-
+    if _G["PartyMemberFrame" .. 0] then
+        print("PartyMemberFrame found")
+    end
+    if CompactPartyFrame then
+        print("CompactPartyFrame found")
+    end
     -- Hide new-style compact party frame if it is shown
     if CompactPartyFrame and CompactPartyFrame:IsShown() then
         print("Hiding CompactPartyFrame")
@@ -70,8 +75,6 @@ local function HideBlizzardFrames()
 end
 
 local function UpdateFramePositions()
-
-    print(frameSettings.layout)
 
     for i, frame in ipairs(partyFrames) do
         frame:ClearAllPoints()
@@ -131,8 +134,6 @@ local function CreateUnitFrame(unit, index)
                 self:RegisterForClicks("AnyUp")
                 self:SetAttribute("type1", "target")
                 self:SetAttribute("type2", "menu")
-
-                print("Frame 1 moved to:", baseX, baseY)
                 UpdateFramePositions()
             end)
         else
@@ -315,8 +316,38 @@ local function CreateUnitFrame(unit, index)
                     end
                 end
             end
+
+            -- Healing prediction using wow API
+            local guid = UnitGUID(unit)
+            local myGUID = UnitGUID("player")
+            local heal = UnitGetIncomingHeals(unit)
+            if maxHp > 0 and heal and heal > 0 then
+                self.healPredictionBar:SetMinMaxValues(0, maxHp)
+                self.healPredictionBar:SetValue(math.min(hp + heal, maxHp))
+                self.healPredictionBar:Show()
+                -- Set the frame level above the health bar so it's visible
+                self.healPredictionBar:SetFrameLevel(self.healthBar:GetFrameLevel() - 1)
+                -- Make the heal prediction bar partially transparent
+                self.healPredictionBar:SetAlpha(0.6)
+                -- Optionally, set a different color for the prediction
+                self.healPredictionBar:SetStatusBarColor(0, 1, 0, 0.4)
+                -- Make sure the health bar is drawn above the background but below the prediction bar
+                self.healthBar:SetFrameLevel(self.healPredictionBar:GetFrameLevel() + 1)
+            else
+                self.healPredictionBar:Hide()
+            end
+            
         end
     end)
+
+    -- Healing prediction bar (overlay)
+    frame.healPredictionBar = CreateFrame("StatusBar", nil, frame)
+    frame.healPredictionBar:SetStatusBarTexture(LSM:Fetch("statusbar", "Smooth"))
+    frame.healPredictionBar:SetStatusBarColor(0, 1, 0, 0.4) -- Green, semi-transparent
+    frame.healPredictionBar:SetFrameLevel(frame.healthBar:GetFrameLevel() + 1)
+    frame.healPredictionBar:SetPoint("TOPLEFT", frame.healthBar, "TOPLEFT")
+    frame.healPredictionBar:SetPoint("BOTTOMRIGHT", frame.healthBar, "BOTTOMRIGHT")
+    frame.healPredictionBar:Hide()
 
     table.insert(partyFrames, frame)
     return frame
@@ -332,15 +363,35 @@ local function CreateFrames()
     end
     wipe(partyFrames)
 
-    if IsInRaid() then
+    if frameSettings.isMovable then
+        -- Always show 5 frames with placeholders
+        local units = { "player", "party1", "party2", "party3", "party4" }
+        for i, unit in ipairs(units) do
+            if UnitExists(unit) then
+                CreateUnitFrame(unit, i)
+            else
+                -- Use "player" as a placeholder for missing units
+                local frame = CreateUnitFrame("player", i)
+                frame.nameText:SetText("Placeholder " .. i)
+                frame.healthBar:SetValue(math.random(30, 100)) -- Random health for visual variety
+            end
+            UpdateFramePositions()
+        end
+--[[     elseif IsInRaid() then
         for i = 1, 40 do
             local unit = "raid" .. i
             if UnitExists(unit) then
                 CreateUnitFrame(unit, #partyFrames + 1)
                 UpdateFramePositions()
             end
+        end ]]
+            -- Do nothing if in a raid
+    elseif IsInRaid() then
+        -- Optionally hide your frames if they exist
+        for _, frame in ipairs(partyFrames) do
+            frame:Hide()
         end
-        print(#partyFrames .. " raid frames created.")
+        return
     elseif IsInGroup() then
         local units = { "player" }
         for i = 1, 4 do
@@ -353,7 +404,6 @@ local function CreateFrames()
             CreateUnitFrame(unit, i)
             UpdateFramePositions()
         end
-        print(#partyFrames .. " party frames created.")
     end
 end
 
@@ -361,7 +411,7 @@ end
 local testFrames = {}
 
 -- Function to create test unit frames
-local function CreateTestFrames()
+--[[ local function CreateTestFrames()
     for i = 1, 5 do
         local frame = CreateUnitFrame("player", i) -- Use "player" as a placeholder unit
         frame:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 200, -40 * i) -- Offset for test frames
@@ -372,10 +422,10 @@ local function CreateTestFrames()
         frame:Hide() -- Initially hidden
         table.insert(testFrames, frame)
     end
-end
+end ]]
 
 -- Function to toggle test frames visibility
-local function ToggleTestFrames(show)
+--[[ local function ToggleTestFrames(show)
     for _, frame in ipairs(testFrames) do
         if show then
             frame:Show()
@@ -383,7 +433,7 @@ local function ToggleTestFrames(show)
             frame:Hide()
         end
     end
-end
+end ]]
 
 local function UpdateFrameSizes()
     for _, frame in ipairs(partyFrames) do
@@ -395,6 +445,7 @@ end
 
 -- Create a configuration window
 local function CreateConfigWindow()
+    local _, playerClass = UnitClass("player")
     local configFrame = CreateFrame("Frame", "CF_ConfigWindow", UIParent, "BasicFrameTemplateWithInset")
     configFrame:SetSize(300, 500)
     configFrame:SetPoint("CENTER")
@@ -404,11 +455,15 @@ local function CreateConfigWindow()
     configFrame:SetScript("OnDragStart", configFrame.StartMoving)
     configFrame:SetScript("OnDragStop", configFrame.StopMovingOrSizing)
 
+    -- Ensure config frame is above most UI
+    configFrame:SetFrameStrata("DIALOG")
+    configFrame:SetFrameLevel(100)
+
     configFrame.title = configFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     configFrame.title:SetPoint("CENTER", configFrame.TitleBg, "CENTER", 0, 0)
     configFrame.title:SetText("Unit Frames Config")
 
-    -- Checkbox to toggle test frames
+--[[     -- Checkbox to toggle test frames
     local checkbox = CreateFrame("CheckButton", nil, configFrame, "UICheckButtonTemplate")
     checkbox:SetPoint("TOPLEFT", configFrame, "TOPLEFT", 10, -30)
     checkbox.text = checkbox:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -416,18 +471,18 @@ local function CreateConfigWindow()
     checkbox.text:SetText("Show Test Frames")
     checkbox:SetScript("OnClick", function(self)
         ToggleTestFrames(self:GetChecked())
-    end)
+    end) ]]
 
     -- Checkbox to make frames movable
     local movableCheckbox = CreateFrame("CheckButton", nil, configFrame, "UICheckButtonTemplate")
-    movableCheckbox:SetPoint("TOPLEFT", checkbox, "BOTTOMLEFT", 0, -10)
+    movableCheckbox:SetPoint("TOPLEFT", configFrame, "TOPLEFT", 10, -30)
     movableCheckbox.text = movableCheckbox:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     movableCheckbox.text:SetPoint("LEFT", movableCheckbox, "RIGHT", 5, 0)
     movableCheckbox.text:SetText("Make Frames Movable")
     movableCheckbox:SetScript("OnClick", function(self)
     frameSettings.isMovable = self:GetChecked()
     partyFrames[1]:SetMovable(frameSettings.isMovable)
-    partyFrames[1]:EnableMouse(true) -- Always allow mouse for tooltips/clicks!
+    partyFrames[1]:EnableMouse(true)
     if frameSettings.isMovable then
         partyFrames[1]:RegisterForDrag("LeftButton")
         partyFrames[1]:SetScript("OnDragStart", partyFrames[1].StartMoving)
@@ -448,8 +503,6 @@ local function CreateConfigWindow()
             self:RegisterForClicks("AnyUp")
             self:SetAttribute("type1", "target")
             self:SetAttribute("type2", "menu")
-
-            print("Frame 1 moved to:", baseX, baseY)
             UpdateFramePositions()
         end)
     else
@@ -457,6 +510,7 @@ local function CreateConfigWindow()
         partyFrames[1]:SetScript("OnDragStart", nil)
         partyFrames[1]:SetScript("OnDragStop", nil)
     end
+    CreateFrames() -- <--- Add this line to refresh the frames
 end)
 
     -- Dropdown to choose layout
@@ -528,7 +582,7 @@ end)
     -- Tracked Spells Label
     local trackedLabel = configFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     trackedLabel:SetPoint("TOPLEFT", resetButton, "BOTTOMLEFT", 0, -20)
-    trackedLabel:SetText("Tracked Spells (by SpellID):")
+    trackedLabel:SetText("Tracked Spells (" .. (playerClass or "Unknown") .. ")")
 
     -- ScrollFrame for spell list
     local scrollFrame = CreateFrame("ScrollFrame", nil, configFrame, "UIPanelScrollFrameTemplate")
@@ -540,32 +594,51 @@ end)
     scrollFrame:SetScrollChild(spellList)
 
     local function RefreshSpellList()
-        -- Clear old
+        -- Remove all previous children (fontstrings and buttons)
         for _, child in ipairs({spellList:GetChildren()}) do
             child:Hide()
+            child:SetParent(nil)
         end
-
-        local _, playerClass = UnitClass("player")
         local tracked = ZUF_Settings.trackedSpells and ZUF_Settings.trackedSpells[playerClass] or {}
         for i, spellID in ipairs(tracked) do
             local name, _, icon = GetSpellInfo(spellID)
-            local row = spellList:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-            row:SetPoint("TOPLEFT", spellList, "TOPLEFT", 0, -((i-1)*16))
-            row:SetText((icon and "|T"..icon..":14|t " or "") .. (name or "Unknown") .. " (" .. spellID .. ")")
-            row:Show()
+            -- Create a container frame for the row
+            local rowFrame = CreateFrame("Frame", nil, spellList)
+            rowFrame:SetSize(180, 16)
+            rowFrame:SetPoint("TOPLEFT", spellList, "TOPLEFT", 0, -((i-1)*16))
+
+            local rowText = rowFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            rowText:SetPoint("LEFT", rowFrame, "LEFT", 0, 0)
+            rowText:SetText((icon and "|T"..icon..":14|t " or "") .. (name or "Unknown") .. " (" .. spellID .. ")")
+            rowText:Show()
+
+            -- Add remove ("X") button
+            local removeBtn = CreateFrame("Button", nil, rowFrame, "UIPanelButtonTemplate")
+            removeBtn:SetSize(18, 16)
+            removeBtn:SetPoint("LEFT", rowText, "RIGHT", 5, 0)
+            removeBtn:SetText("X")
+            removeBtn:SetScript("OnClick", function()
+                table.remove(ZUF_Settings.trackedSpells[playerClass], i)
+                RefreshSpellList()
+            end)
+            removeBtn:Show()
         end
     end
 
     -- Add SpellID input
+    local addBoxLabel = configFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    addBoxLabel:SetPoint("BOTTOMLEFT", scrollFrame, "BOTTOMLEFT", 5, -15)
+    addBoxLabel:SetText("Drag a spell here or enter a SpellID:")
+
     local addBox = CreateFrame("EditBox", nil, configFrame, "InputBoxTemplate")
     addBox:SetSize(60, 20)
-    addBox:SetPoint("TOPLEFT", scrollFrame, "BOTTOMLEFT", 5, -10)
+    addBox:SetPoint("TOPLEFT", addBoxLabel, "BOTTOMLEFT", 0, -2)
     addBox:SetAutoFocus(false)
     addBox:SetNumeric(true)
     addBox:SetMaxLetters(7)
 
     local addButton = CreateFrame("Button", nil, configFrame, "UIPanelButtonTemplate")
-    addButton:SetSize(60, 20)
+    addButton:SetSize(80, 20)
     addButton:SetPoint("LEFT", addBox, "RIGHT", 5, 0)
     addButton:SetText("Add")
 
@@ -586,6 +659,24 @@ end)
         print("Added spellID:", spellID)
     end)
 
+    addBox:SetScript("OnReceiveDrag", function(self)
+    local type, id, subType = GetCursorInfo()
+    if type == "spell" then
+        local spellName, spellSubName = GetSpellBookItemName(id, "spell")
+        local spellId = select(7, GetSpellInfo(spellName, spellSubName))
+        if spellId then
+            self:SetText(tostring(spellId))
+        end
+    end
+    ClearCursor()
+end)
+
+    addBox:SetScript("OnMouseUp", function(self, button)
+        if button == "RightButton" then
+            self:SetText("")
+        end
+    end)
+
     RefreshSpellList()
 
     configFrame:Hide() -- Initially hidden
@@ -597,7 +688,6 @@ SLASH_ZUF1 = "/ZUF"
 SlashCmdList["ZUF"] = function()
     if not CF_ConfigWindow then
         CF_ConfigWindow = CreateConfigWindow()
-        CreateTestFrames() -- Create test frames when the config window is first opened
     end
     if CF_ConfigWindow:IsShown() then
         CF_ConfigWindow:Hide()
@@ -605,6 +695,55 @@ SlashCmdList["ZUF"] = function()
         CF_ConfigWindow:Show()
     end
 end
+
+-- Minimap Button
+local minimapButton = CreateFrame("Button", "ZUF_MinimapButton", Minimap)
+minimapButton:SetSize(32, 32)
+minimapButton:SetFrameStrata("MEDIUM")
+minimapButton:SetMovable(true)
+minimapButton:SetClampedToScreen(true)
+minimapButton:SetHighlightTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
+
+-- Icon
+minimapButton.icon = minimapButton:CreateTexture(nil, "BACKGROUND")
+minimapButton.icon:SetTexture("Interface\\AddOns\\zindure-unit-frames\\media\\minimap-icon.tga") -- Use your own icon here!
+minimapButton.icon:SetSize(20, 20)
+minimapButton.icon:SetPoint("CENTER")
+
+-- Border
+minimapButton.border = minimapButton:CreateTexture(nil, "OVERLAY")
+minimapButton.border:SetTexture("Interface\\Minimap\\MiniMap-TrackingBorder")
+minimapButton.border:SetSize(54, 54)
+minimapButton.border:SetPoint("TOPLEFT")
+
+-- Position on minimap
+minimapButton:SetPoint("TOPLEFT", Minimap, "TOPLEFT", 0, 0)
+
+-- Drag to move
+minimapButton:RegisterForDrag("LeftButton")
+minimapButton:SetScript("OnDragStart", function(self) self:StartMoving() end)
+minimapButton:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
+
+-- Click to toggle config window
+minimapButton:SetScript("OnClick", function(self, button)
+    if not CF_ConfigWindow then
+        CF_ConfigWindow = CreateConfigWindow()
+    end
+    if CF_ConfigWindow:IsShown() then
+        CF_ConfigWindow:Hide()
+    else
+        CF_ConfigWindow:Show()
+    end
+end)
+
+-- Tooltip
+minimapButton:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+    GameTooltip:SetText("Zindure's Unit Frames\n|cffffff00Click to open config|r", nil, nil, nil, nil, true)
+end)
+minimapButton:SetScript("OnLeave", function(self)
+    GameTooltip:Hide()
+end)
 
 -- Init
 local f = CreateFrame("Frame")
@@ -614,37 +753,13 @@ f:RegisterEvent("PLAYER_ENTERING_WORLD") -- Triggered when entering the world
 f:RegisterEvent("ADDON_LOADED") -- Triggered when the addon is loaded
 f:SetScript("OnEvent", function(self, event, arg1)
     if event == "ADDON_LOADED" and arg1 == "zindure-unit-frames" then
-        -- Debug: Check if ZUF_Settings exists
-        print("ADDON_LOADED event triggered for:", arg1)
-        if ZUF_Settings then
-            print("ZUF_Settings before initialization:", ZUF_Settings.frameSettings)
-        else
-            print("ZUF_Settings is nil before initialization")
-        end
-
+        
         -- Initialize saved variables if they don't exist
         if ZUF_Settings == nil then
             print("Initializing saved variables for Zindure's Unit Frames")
-            ZUF_Settings = {
-                frameSettings = {
-                    isMovable = false,
-                    layout = "vertical",
-                    frameWidth = 150,
-                    frameHeight = 25,
-                    baseX = 30,
-                    baseY = -40,
-                },
-                trackedSpells = {
-                    PRIEST = {408124, 139, 17},
-                    DRUID  = {408124, 417068},
-                    PALADIN = {1022, 1044},
-                    SHAMAN = {61295},
-                    MAGE = {11426},
-                    WARRIOR = {871},
-                },
-            }
+            ZUF_Settings = CopyTable(ZUF_Defaults)
         else
-            print("ZUF_Settings already exists:", ZUF_Settings)
+            print("ZUF_Settings loaded")
         end
 
         -- Load saved settings into frameSettings
