@@ -1,0 +1,54 @@
+name: Manual Build and Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Tag for the release'
+        required: true
+      release_name:
+        description: 'Name of the release'
+        required: true
+      release_body:
+        description: 'Description/body of the release (optional)'
+        required: false
+
+permissions:
+  contents: write  # ← This line is essential to allow creating releases
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up zip name
+      run: |
+        if [ -n "${RELEASE_NAME}" ]; then
+          ZIP_NAME="${RELEASE_NAME}-${RELEASE_TAG}.zip"
+        else
+          ZIP_NAME="release-${RELEASE_TAG}.zip"
+        fi
+        echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
+      env:
+        RELEASE_NAME: ${{ github.event.inputs.release_name }}
+        RELEASE_TAG: ${{ github.event.inputs.release_tag }}
+
+    - name: Create release zip
+      run: |
+        mkdir release
+        rsync -av --exclude='.git*' --exclude='.github' ./ release/
+        cd release
+        zip -r ../$ZIP_NAME .
+
+    - name: Create GitHub release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ github.event.inputs.release_tag }}
+        name: ${{ format('Release {0}', github.event.inputs.release_tag) }}
+        body: ${{ github.event.inputs.release_body }}
+        files: ${{ env.ZIP_NAME }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
