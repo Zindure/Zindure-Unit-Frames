@@ -50,21 +50,13 @@ local function HideBlizzardFrames()
     for i = 1, 4 do
         local frame = _G["PartyMemberFrame" .. i]
         if frame and frame:IsShown() then
-            print("Hiding PartyMemberFrame" .. i)
             frame:UnregisterAllEvents()
             frame:SetParent(hiddenFrame)
             frame:Hide()
         end
     end
-    if _G["PartyMemberFrame" .. 0] then
-        print("PartyMemberFrame found")
-    end
-    if CompactPartyFrame then
-        print("CompactPartyFrame found")
-    end
     -- Hide new-style compact party frame if it is shown
     if CompactPartyFrame and CompactPartyFrame:IsShown() then
-        print("Hiding CompactPartyFrame")
         CompactPartyFrame:UnregisterAllEvents()
         CompactPartyFrame:SetParent(hiddenFrame)
         CompactPartyFrame:Hide()
@@ -171,11 +163,6 @@ local function CreateUnitFrame(unit, index)
     frame.nameText:SetFont(LSM:Fetch("font", "MyFont"), 12, "OUTLINE")
     frame.nameText:SetPoint("CENTER", frame.healthBar, "CENTER")
 
-    --[[ -- Health text
-    frame.healthText = frame.healthBar:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    frame.healthText:SetFont(LSM:Fetch("font", "MyFont"), 8, "OUTLINE")
-    frame.healthText:SetPoint("RIGHT", frame.healthBar, "RIGHT") ]]
-
     -- Effect icons container (bottom left of health bar
     frame.effectIcons = CreateFrame("Frame", nil, frame.healthBar)
     frame.effectIcons:SetPoint("BOTTOMLEFT", frame.healthBar, "BOTTOMLEFT", 2, 2)
@@ -202,10 +189,6 @@ local function CreateUnitFrame(unit, index)
     frame:RegisterForClicks("AnyUp")
     frame:SetAttribute("type1", "target")
     frame:SetAttribute("type2", "togglemenu")
-
-    frame:SetScript("PreClick", function(self, button)
-        print("PreClick:", button, "unit:", self.unit)
-    end)
 
     -- Enable mouseover tooltips
     frame:SetScript("OnEnter", function(self)
@@ -381,15 +364,7 @@ local function CreateFrames()
             end
             UpdateFramePositions()
         end
---[[     elseif IsInRaid() then
-        for i = 1, 40 do
-            local unit = "raid" .. i
-            if UnitExists(unit) then
-                CreateUnitFrame(unit, #partyFrames + 1)
-                UpdateFramePositions()
-            end
-        end ]]
-            -- Do nothing if in a raid
+        -- Do nothing if in a raid
     elseif IsInRaid() then
         -- Optionally hide your frames if they exist
         for _, frame in ipairs(partyFrames) do
@@ -410,34 +385,6 @@ local function CreateFrames()
         end
     end
 end
-
--- Test unit frames table
-local testFrames = {}
-
--- Function to create test unit frames
---[[ local function CreateTestFrames()
-    for i = 1, 5 do
-        local frame = CreateUnitFrame("player", i) -- Use "player" as a placeholder unit
-        frame:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 200, -40 * i) -- Offset for test frames
-        frame:SetScript("OnUpdate", nil) -- Disable updates for test frames
-        frame.healthBar:SetMinMaxValues(0, 100)
-        frame.healthBar:SetValue(math.random(50, 100)) -- Random health value for testing
-        frame.nameText:SetText("Test Unit " .. i)
-        frame:Hide() -- Initially hidden
-        table.insert(testFrames, frame)
-    end
-end ]]
-
--- Function to toggle test frames visibility
---[[ local function ToggleTestFrames(show)
-    for _, frame in ipairs(testFrames) do
-        if show then
-            frame:Show()
-        else
-            frame:Hide()
-        end
-    end
-end ]]
 
 local function UpdateFrameSizes()
     for _, frame in ipairs(partyFrames) do
@@ -466,16 +413,6 @@ local function CreateConfigWindow()
     configFrame.title = configFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     configFrame.title:SetPoint("CENTER", configFrame.TitleBg, "CENTER", 0, 0)
     configFrame.title:SetText("Unit Frames Config")
-
---[[     -- Checkbox to toggle test frames
-    local checkbox = CreateFrame("CheckButton", nil, configFrame, "UICheckButtonTemplate")
-    checkbox:SetPoint("TOPLEFT", configFrame, "TOPLEFT", 10, -30)
-    checkbox.text = checkbox:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    checkbox.text:SetPoint("LEFT", checkbox, "RIGHT", 5, 0)
-    checkbox.text:SetText("Show Test Frames")
-    checkbox:SetScript("OnClick", function(self)
-        ToggleTestFrames(self:GetChecked())
-    end) ]]
 
     -- Checkbox to make frames movable
     local movableCheckbox = CreateFrame("CheckButton", nil, configFrame, "UICheckButtonTemplate")
