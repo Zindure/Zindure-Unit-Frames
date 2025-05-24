@@ -350,7 +350,7 @@ local function CreateFrames()
     end
     wipe(partyFrames)
 
-    if frameSettings.isMovable then
+    if frameSettings.isMovable and not IsInRaid() then
         -- Always show 5 frames with placeholders
         local units = { "player", "party1", "party2", "party3", "party4" }
         for i, unit in ipairs(units) do
@@ -366,7 +366,6 @@ local function CreateFrames()
         end
         -- Do nothing if in a raid
     elseif IsInRaid() then
-        -- Optionally hide your frames if they exist
         for _, frame in ipairs(partyFrames) do
             frame:Hide()
         end
@@ -398,7 +397,7 @@ end
 local function CreateConfigWindow()
     local _, playerClass = UnitClass("player")
     local configFrame = CreateFrame("Frame", "CF_ConfigWindow", UIParent, "BasicFrameTemplateWithInset")
-    configFrame:SetSize(300, 500)
+    configFrame:SetSize(320, 500)
     configFrame:SetPoint("CENTER")
     configFrame:SetMovable(true)
     configFrame:EnableMouse(true)
@@ -419,44 +418,48 @@ local function CreateConfigWindow()
     movableCheckbox:SetPoint("TOPLEFT", configFrame, "TOPLEFT", 10, -30)
     movableCheckbox.text = movableCheckbox:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     movableCheckbox.text:SetPoint("LEFT", movableCheckbox, "RIGHT", 5, 0)
-    movableCheckbox.text:SetText("Make Frames Movable")
+    movableCheckbox.text:SetText("Make Frames Movable (Drag Player Frame)")
     movableCheckbox:SetScript("OnClick", function(self)
-    frameSettings.isMovable = self:GetChecked()
-    partyFrames[1]:SetMovable(frameSettings.isMovable)
-    partyFrames[1]:EnableMouse(true)
-    if frameSettings.isMovable then
-        partyFrames[1]:RegisterForDrag("LeftButton")
-        partyFrames[1]:SetScript("OnDragStart", partyFrames[1].StartMoving)
-        partyFrames[1]:SetScript("OnDragStop", function(self)
-            self:StopMovingOrSizing()
-            local xOfs, yOfs = self:GetLeft(), self:GetTop()
-            local parentLeft, parentTop = UIParent:GetLeft(), UIParent:GetTop()
-            local baseX = xOfs - parentLeft
-            local baseY = yOfs - parentTop
-            frameSettings.baseX = baseX
-            frameSettings.baseY = baseY
-            EnsureSavedVariables()
-            ZUF_Settings.frameSettings.baseX = baseX
-            ZUF_Settings.frameSettings.baseY = baseY
+        frameSettings.isMovable = self:GetChecked()
+        if IsInGroup() then
+            partyFrames[1]:SetMovable(frameSettings.isMovable)
+            partyFrames[1]:EnableMouse(true)
+            if frameSettings.isMovable then
+                if IsInGroup() then
+                    partyFrames[1]:RegisterForDrag("LeftButton")
+                    partyFrames[1]:SetScript("OnDragStart", partyFrames[1].StartMoving)
+                    partyFrames[1]:SetScript("OnDragStop", function(self)
+                        self:StopMovingOrSizing()
+                        local xOfs, yOfs = self:GetLeft(), self:GetTop()
+                        local parentLeft, parentTop = UIParent:GetLeft(), UIParent:GetTop()
+                        local baseX = xOfs - parentLeft
+                        local baseY = yOfs - parentTop
+                        frameSettings.baseX = baseX
+                        frameSettings.baseY = baseY
+                        EnsureSavedVariables()
+                        ZUF_Settings.frameSettings.baseX = baseX
+                        ZUF_Settings.frameSettings.baseY = baseY
 
-            -- Re-apply unit/click attributes
-            self:SetAttribute("unit", self.unit or "player")
-            self:RegisterForClicks("AnyUp")
-            self:SetAttribute("type1", "target")
-            self:SetAttribute("type2", "togglemenu")
-            UpdateFramePositions()
-        end)
-    else
-        partyFrames[1]:RegisterForDrag()
-        partyFrames[1]:SetScript("OnDragStart", nil)
-        partyFrames[1]:SetScript("OnDragStop", nil)
-    end
-    CreateFrames() -- <--- Add this line to refresh the frames
-end)
+                        -- Re-apply unit/click attributes
+                        self:SetAttribute("unit", self.unit or "player")
+                        self:RegisterForClicks("AnyUp")
+                        self:SetAttribute("type1", "target")
+                        self:SetAttribute("type2", "togglemenu")
+                        UpdateFramePositions()
+                    end)
+                end
+            else
+                partyFrames[1]:RegisterForDrag()
+                partyFrames[1]:SetScript("OnDragStart", nil)
+                partyFrames[1]:SetScript("OnDragStop", nil)
+            end
+            CreateFrames()
+        end
+    end)
 
     -- Dropdown to choose layout
     local layoutDropdown = CreateFrame("Frame", "CF_LayoutDropdown", configFrame, "UIDropDownMenuTemplate")
-    layoutDropdown:SetPoint("TOPLEFT", movableCheckbox, "BOTTOMLEFT", -15, -10)
+    layoutDropdown:SetPoint("TOPLEFT", movableCheckbox, "BOTTOMLEFT", -5, -10)
     UIDropDownMenu_SetWidth(layoutDropdown, 150)
     UIDropDownMenu_SetText(layoutDropdown, "Layout: Vertical")
     UIDropDownMenu_Initialize(layoutDropdown, function(self, level, menuList)
