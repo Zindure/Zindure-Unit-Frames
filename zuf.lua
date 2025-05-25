@@ -15,6 +15,9 @@ frameSettings = {
     baseY = -40, -- Base Y offset
 }
 
+local testMode = false
+local testFrames = {}
+
 local EFFECT_SPELLIDS = {}
 
 local powerBarHeight = 6 -- or 8, or any pixel value you want for the power bar height
@@ -31,6 +34,18 @@ local function EnsureSavedVariables()
             baseY = -40,
         }
     end
+end
+
+local function CopyTable(tbl)
+    local copy = {}
+    for k, v in pairs(tbl) do
+        if type(v) == "table" then
+            copy[k] = CopyTable(v)
+        else
+            copy[k] = v
+        end
+    end
+    return copy
 end
 
 -- Test unit frames table
@@ -166,7 +181,14 @@ local function CreateUnitFrame(unit, index)
     -- Effect icons container (bottom left of health bar
     frame.effectIcons = CreateFrame("Frame", nil, frame.healthBar)
     frame.effectIcons:SetPoint("BOTTOMLEFT", frame.healthBar, "BOTTOMLEFT", 2, 2)
-    frame.effectIcons:SetSize(60, 16) -- Room for several icons
+    frame.effectIcons:SetSize(60, 16)
+    frame.effectIcons.icons = {}
+
+    -- Buff icons container (top left of health bar)
+    frame.buffIcons = CreateFrame("Frame", nil, frame.healthBar)
+    frame.buffIcons:SetPoint("TOPLEFT", frame.healthBar, "TOPLEFT", 2, -2)
+    frame.buffIcons:SetSize(60, 16)
+    frame.buffIcons.icons = {}
 
     -- Helper to add an effect icon by spellID
     local iconSize = 14
@@ -249,16 +271,12 @@ local function CreateUnitFrame(unit, index)
             local r, g, b = PowerBarColor[powerType] and PowerBarColor[powerType].r or 0, PowerBarColor[powerType] and PowerBarColor[powerType].g or 0, PowerBarColor[powerType] and PowerBarColor[powerType].b or 1
             self.powerBar:SetStatusBarColor(r, g, b)
 
-            -- EFFECT TRACKING
-            -- Hide and release previous icons and cooldowns
+            -- EFFECT TRACKING (trackedSpells)
+            -- Hide and release previous effect icons and cooldowns
             for _, icon in ipairs(self.effectIcons.icons) do
                 icon:Hide()
-                if icon.cooldown then
-                    icon.cooldown:Hide()
-                end
-                if icon.countText then
-                    icon.countText:Hide()
-                end
+                if icon.cooldown then icon.cooldown:Hide() end
+                if icon.countText then icon.countText:Hide() end
             end
             wipe(self.effectIcons.icons)
 
@@ -267,7 +285,7 @@ local function CreateUnitFrame(unit, index)
                 local name, iconTexture, count, dispelType, duration, expires, caster, isStealable, shouldConsolidate, spellId = UnitAura(unit, i, "HELPFUL")
                 if not name then break end
                 for _, effectSpellId in ipairs(EFFECT_SPELLIDS) do
-                    if spellId == effectSpellId and caster == "player" then  -- Only show if you cast it
+                    if spellId == effectSpellId and caster == "player" then
                         local icon = self.effectIcons:CreateTexture(nil, "OVERLAY")
                         icon:SetSize(14, 14)
                         icon:SetPoint("LEFT", self.effectIcons, "LEFT", (idx - 1) * (14 + 2), 0)
@@ -288,7 +306,7 @@ local function CreateUnitFrame(unit, index)
                             icon.cooldown = cooldown
                         end
 
-                        -- Add stack count if > 1 (after cooldown, so it's always on top)
+                        -- Add stack count if > 1
                         if count and count > 1 then
                             local countText = self.effectIcons:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
                             countText:SetPoint("BOTTOM", icon, "BOTTOM", 0, 0)
@@ -299,6 +317,59 @@ local function CreateUnitFrame(unit, index)
                         end
 
                         idx = idx + 1
+                        break
+                    end
+                end
+            end
+
+            -- BUFF TRACKING (trackedBuffs)
+            -- Hide and release previous buff icons and cooldowns
+            for _, icon in ipairs(self.buffIcons.icons) do
+                icon:Hide()
+                if icon.cooldown then icon.cooldown:Hide() end
+                if icon.countText then icon.countText:Hide() end
+            end
+            wipe(self.buffIcons.icons)
+
+            local buffIdx = 1
+            local playerClass = select(2, UnitClass("player"))
+            local trackedBuffs = (ZUF_Settings.trackedBuffs and ZUF_Settings.trackedBuffs[playerClass]) or {}
+            for i = 1, 40 do
+                local name, iconTexture, count, dispelType, duration, expires, caster, isStealable, shouldConsolidate, spellId = UnitAura(unit, i, "HELPFUL")
+                if not name then break end
+                for _, buffSpellId in ipairs(trackedBuffs) do
+                    if spellId == buffSpellId then
+                        local icon = self.buffIcons:CreateTexture(nil, "OVERLAY")
+                        icon:SetSize(14, 14)
+                        icon:SetPoint("LEFT", self.buffIcons, "LEFT", (buffIdx - 1) * (14 + 2), 0)
+                        icon:SetTexture(iconTexture)
+                        icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+                        icon:Show()
+                        self.buffIcons.icons[buffIdx] = icon
+
+                        -- Add cooldown swipe
+                        if duration and duration > 0 and expires then
+                            local cooldown = CreateFrame("Cooldown", nil, self.buffIcons, "CooldownFrameTemplate")
+                            cooldown:SetAllPoints(icon)
+                            cooldown:SetDrawEdge(false)
+                            cooldown:SetDrawBling(false)
+                            cooldown:SetReverse(true)
+                            cooldown:SetCooldown(expires - duration, duration)
+                            cooldown:Show()
+                            icon.cooldown = cooldown
+                        end
+
+                        -- Add stack count if > 1
+                        if count and count > 1 then
+                            local countText = self.buffIcons:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+                            countText:SetPoint("BOTTOM", icon, "BOTTOM", 0, 0)
+                            countText:SetText(count)
+                            countText:SetTextColor(1, 1, 1, 1)
+                            icon.countText = countText
+                            countText:Show()
+                        end
+
+                        buffIdx = buffIdx + 1
                         break
                     end
                 end
@@ -338,6 +409,157 @@ local function CreateUnitFrame(unit, index)
 
     table.insert(partyFrames, frame)
     return frame
+end
+
+local function UpdateTestFramePositions()
+    for i, frame in ipairs(testFrames) do
+        frame:ClearAllPoints()
+        if frameSettings.layout == "vertical" then
+            if i == 1 then
+                frame:SetPoint("TOPLEFT", UIParent, "TOPLEFT", frameSettings.baseX, frameSettings.baseY)
+            else
+                frame:SetPoint("TOPLEFT", testFrames[i - 1], "BOTTOMLEFT", 0, -10)
+            end
+        else
+            if i == 1 then
+                frame:SetPoint("TOPLEFT", UIParent, "TOPLEFT", frameSettings.baseX, frameSettings.baseY)
+            else
+                frame:SetPoint("TOPLEFT", testFrames[i - 1], "TOPRIGHT", 10, 0)
+            end
+        end
+        frame:SetSize(frameSettings.frameWidth, frameSettings.frameHeight)
+        frame.healthBar:SetHeight(frameSettings.frameHeight - powerBarHeight)
+        frame.powerBar:SetHeight(powerBarHeight)
+    end
+end
+
+local function CreateTestFrame(index)
+    local frame = CreateFrame("Button", "CF_TestFrame"..index, UIParent, "SecureUnitButtonTemplate")
+    frame:SetSize(frameSettings.frameWidth, frameSettings.frameHeight)
+
+    if index == 1 then
+        frame:SetMovable(true)
+        frame:EnableMouse(true)
+        frame:RegisterForDrag("LeftButton")
+        frame:SetScript("OnDragStart", frame.StartMoving)
+        frame:SetScript("OnDragStop", function(self)
+            self:StopMovingOrSizing()
+            -- Save new position for real frames
+            local xOfs, yOfs = self:GetLeft(), self:GetTop()
+            local parentLeft, parentTop = UIParent:GetLeft(), UIParent:GetTop()
+            local baseX = xOfs - parentLeft
+            local baseY = yOfs - parentTop
+            frameSettings.baseX = baseX
+            frameSettings.baseY = baseY
+            EnsureSavedVariables()
+            ZUF_Settings.frameSettings.baseX = baseX
+            ZUF_Settings.frameSettings.baseY = baseY
+            UpdateTestFramePositions()
+            UpdateFramePositions()
+        end)
+    else
+        frame:SetMovable(false)
+        frame:EnableMouse(false)
+        frame:RegisterForDrag()
+        frame:SetScript("OnDragStart", nil)
+        frame:SetScript("OnDragStop", nil)
+    end
+
+    -- Background
+    frame.bg = frame:CreateTexture(nil, "BACKGROUND")
+    frame.bg:SetAllPoints()
+    frame.bg:SetColorTexture(0.2, 0.2, 0.2, 0.8)
+
+    -- Health bar
+    frame.healthBar = CreateFrame("StatusBar", nil, frame)
+    frame.healthBar:SetStatusBarTexture(LSM:Fetch("statusbar", "Smooth"))
+    frame.healthBar:SetStatusBarColor(0.2, 0.9, 0.2)
+    frame.healthBar:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
+    frame.healthBar:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, 0)
+    frame.healthBar:SetHeight(frameSettings.frameHeight - powerBarHeight)
+    frame.healthBar:SetMinMaxValues(0, 100)
+    frame.healthBar:SetValue(math.random(30, 100))
+
+    -- Power bar
+    frame.powerBar = CreateFrame("StatusBar", nil, frame)
+    frame.powerBar:SetStatusBarTexture(LSM:Fetch("statusbar", "Smooth"))
+    frame.powerBar:SetPoint("TOPLEFT", frame.healthBar, "BOTTOMLEFT", 0, 0)
+    frame.powerBar:SetPoint("TOPRIGHT", frame.healthBar, "BOTTOMRIGHT", 0, 0)
+    frame.powerBar:SetHeight(powerBarHeight)
+    frame.powerBar:SetMinMaxValues(0, 100)
+    frame.powerBar:SetValue(math.random(10, 100))
+    frame.powerBar:SetStatusBarColor(0, 0.4, 1)
+
+    -- Name text
+    frame.nameText = frame.healthBar:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    frame.nameText:SetFont(LSM:Fetch("font", "MyFont"), 12, "OUTLINE")
+    frame.nameText:SetPoint("CENTER", frame.healthBar, "CENTER")
+    if index == 1 then
+        frame.nameText:SetText("Drag me")
+    else
+        frame.nameText:SetText("Test " .. index)
+    end
+
+    -- Effect icons
+    frame.effectIcons = CreateFrame("Frame", nil, frame.healthBar)
+    frame.effectIcons:SetPoint("BOTTOMLEFT", frame.healthBar, "BOTTOMLEFT", 2, 2)
+    frame.effectIcons:SetSize(60, 16)
+    frame.effectIcons.icons = {}
+    for i = 1, 2 do
+        local icon = frame.effectIcons:CreateTexture(nil, "OVERLAY")
+        icon:SetSize(14, 14)
+        icon:SetPoint("LEFT", frame.effectIcons, "LEFT", (i-1)*16, 0)
+        icon:SetTexture("Interface\\Icons\\Spell_Holy_Renew") -- Placeholder icon
+        icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+        icon:Show()
+        frame.effectIcons.icons[i] = icon
+    end
+
+    -- Buff icons
+    frame.buffIcons = CreateFrame("Frame", nil, frame.healthBar)
+    frame.buffIcons:SetPoint("TOPLEFT", frame.healthBar, "TOPLEFT", 2, -2)
+    frame.buffIcons:SetSize(60, 16)
+    frame.buffIcons.icons = {}
+    for i = 1, 2 do
+        local icon = frame.buffIcons:CreateTexture(nil, "OVERLAY")
+        icon:SetSize(14, 14)
+        icon:SetPoint("LEFT", frame.buffIcons, "LEFT", (i-1)*16, 0)
+        icon:SetTexture("Interface\\Icons\\Spell_Nature_Regeneration") -- Mark of the Wild icon
+        icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+        icon:Show()
+        frame.buffIcons.icons[i] = icon
+    end
+
+    return frame
+end
+
+local function ShowTestFrames()
+    -- Hide real frames
+    for _, frame in ipairs(partyFrames) do
+        frame:Hide()
+    end
+    -- Create or show test frames
+    if #testFrames == 0 then
+        for i = 1, 5 do
+            local frame = CreateTestFrame(i)
+            table.insert(testFrames, frame)
+        end
+    end
+    for _, frame in ipairs(testFrames) do
+        frame:Show()
+    end
+    UpdateTestFramePositions()
+end
+
+local function HideTestFrames()
+    for _, frame in ipairs(testFrames) do
+        frame:Hide()
+    end
+    -- Show real frames
+    for _, frame in ipairs(partyFrames) do
+        frame:Show()
+    end
+    UpdateFramePositions()
 end
 
 -- Create frames for player + 4 party members
@@ -397,25 +619,52 @@ end
 local function CreateConfigWindow()
     local _, playerClass = UnitClass("player")
     local configFrame = CreateFrame("Frame", "CF_ConfigWindow", UIParent, "BasicFrameTemplateWithInset")
-    configFrame:SetSize(320, 500)
+    configFrame:SetSize(340, 500)
     configFrame:SetPoint("CENTER")
     configFrame:SetMovable(true)
     configFrame:EnableMouse(true)
     configFrame:RegisterForDrag("LeftButton")
     configFrame:SetScript("OnDragStart", configFrame.StartMoving)
     configFrame:SetScript("OnDragStop", configFrame.StopMovingOrSizing)
-
-    -- Ensure config frame is above most UI
     configFrame:SetFrameStrata("DIALOG")
     configFrame:SetFrameLevel(100)
+
+    -- Make the window resizable
+    configFrame:SetResizable(true)
+
+    -- Add a resize handle in the bottom-right corner
+    local resizeButton = CreateFrame("Button", nil, configFrame)
+    resizeButton:SetSize(16, 16)
+    resizeButton:SetPoint("BOTTOMRIGHT", -4, 4)
+    resizeButton:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
+    resizeButton:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
+    resizeButton:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
+    resizeButton:SetScript("OnMouseDown", function(self, button)
+        if button == "LeftButton" then
+            configFrame:StartSizing("BOTTOMRIGHT")
+        end
+    end)
+    resizeButton:SetScript("OnMouseUp", function(self, button)
+        configFrame:StopMovingOrSizing()
+    end)
 
     configFrame.title = configFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     configFrame.title:SetPoint("CENTER", configFrame.TitleBg, "CENTER", 0, 0)
     configFrame.title:SetText("Unit Frames Config")
 
-    -- Checkbox to make frames movable
-    local movableCheckbox = CreateFrame("CheckButton", nil, configFrame, "UICheckButtonTemplate")
-    movableCheckbox:SetPoint("TOPLEFT", configFrame, "TOPLEFT", 10, -30)
+    -- Create the scroll frame and its child
+    local scrollFrame = CreateFrame("ScrollFrame", "CF_ConfigScrollFrame", configFrame, "UIPanelScrollFrameTemplate")
+    scrollFrame:SetPoint("TOPLEFT", configFrame.Bg, "TOPLEFT", 4, -6)
+    scrollFrame:SetPoint("BOTTOMRIGHT", configFrame.Bg, "BOTTOMRIGHT", -28, 6)
+
+    local scrollChild = CreateFrame("Frame", nil, scrollFrame)
+    scrollChild:SetSize(1, 1) -- Will be expanded as children are added
+    scrollFrame:SetScrollChild(scrollChild)
+
+    -- Now, place all your controls on scrollChild instead of configFrame
+    -- Example for the first few controls:
+    local movableCheckbox = CreateFrame("CheckButton", nil, scrollChild, "UICheckButtonTemplate")
+    movableCheckbox:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 10, -10)
     movableCheckbox.text = movableCheckbox:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     movableCheckbox.text:SetPoint("LEFT", movableCheckbox, "RIGHT", 5, 0)
     movableCheckbox.text:SetText("Make Frames Movable (Drag Player Frame)")
@@ -458,25 +707,26 @@ local function CreateConfigWindow()
     end)
 
     -- Dropdown to choose layout
-    local layoutDropdown = CreateFrame("Frame", "CF_LayoutDropdown", configFrame, "UIDropDownMenuTemplate")
+    local layoutDropdown = CreateFrame("Frame", "CF_LayoutDropdown", scrollChild, "UIDropDownMenuTemplate")
     layoutDropdown:SetPoint("TOPLEFT", movableCheckbox, "BOTTOMLEFT", -5, -10)
     UIDropDownMenu_SetWidth(layoutDropdown, 150)
-    UIDropDownMenu_SetText(layoutDropdown, "Layout: Vertical")
+    UIDropDownMenu_SetText(layoutDropdown, "Layout: " .. (frameSettings.layout == "vertical" and "Vertical" or "Horizontal"))
     UIDropDownMenu_Initialize(layoutDropdown, function(self, level, menuList)
-    local info = UIDropDownMenu_CreateInfo()
-    info.func = function(self)
-        frameSettings.layout = self.value
-        UIDropDownMenu_SetText(layoutDropdown, "Layout: " .. (self.value == "vertical" and "Vertical" or "Horizontal"))
-        UpdateFramePositions()
-    end
-    info.text, info.value = "Vertical", "vertical"
-    UIDropDownMenu_AddButton(info)
-    info.text, info.value = "Horizontal", "horizontal"
-    UIDropDownMenu_AddButton(info)
-end)
+        local info = UIDropDownMenu_CreateInfo()
+        info.func = function(self)
+            frameSettings.layout = self.value
+            UIDropDownMenu_SetText(layoutDropdown, "Layout: " .. (self.value == "vertical" and "Vertical" or "Horizontal"))
+            UpdateFramePositions()
+            UpdateTestFramePositions()
+        end
+        info.text, info.value = "Vertical", "vertical"
+        UIDropDownMenu_AddButton(info)
+        info.text, info.value = "Horizontal", "horizontal"
+        UIDropDownMenu_AddButton(info)
+    end)
 
     -- Slider to adjust frame width
-    local widthSlider = CreateFrame("Slider", "CF_WidthSlider", configFrame, "OptionsSliderTemplate")
+    local widthSlider = CreateFrame("Slider", "CF_WidthSlider", scrollChild, "OptionsSliderTemplate")
     widthSlider:SetPoint("TOPLEFT", layoutDropdown, "BOTTOMLEFT", 15, -20)
     widthSlider:SetMinMaxValues(100, 300)
     widthSlider:SetValue(frameSettings.frameWidth)
@@ -488,11 +738,12 @@ end)
         frameSettings.frameWidth = math.floor(value)
         EnsureSavedVariables()
         ZUF_Settings.frameSettings.frameWidth = math.floor(value)
-        UpdateFrameSizes() -- Only update size!
+        UpdateFrameSizes()
+        UpdateTestFramePositions()
     end)
 
     -- Slider to adjust frame height
-    local heightSlider = CreateFrame("Slider", "CF_HeightSlider", configFrame, "OptionsSliderTemplate")
+    local heightSlider = CreateFrame("Slider", "CF_HeightSlider", scrollChild, "OptionsSliderTemplate")
     heightSlider:SetPoint("TOPLEFT", widthSlider, "BOTTOMLEFT", 0, -20)
     heightSlider:SetMinMaxValues(20, 100)
     heightSlider:SetValue(frameSettings.frameHeight)
@@ -500,15 +751,16 @@ end)
     heightSlider:SetObeyStepOnDrag(true)
     heightSlider.text = _G[heightSlider:GetName() .. "Text"]
     heightSlider.text:SetText("Frame Height")
-heightSlider:SetScript("OnValueChanged", function(self, value)
+    heightSlider:SetScript("OnValueChanged", function(self, value)
     frameSettings.frameHeight = math.floor(value)
     EnsureSavedVariables()
     ZUF_Settings.frameSettings.frameHeight = math.floor(value)
     UpdateFrameSizes() -- Only update size!
-end)
+    UpdateTestFramePositions()
+    end)
 
     -- Reset Position Button
-    local resetButton = CreateFrame("Button", nil, configFrame, "UIPanelButtonTemplate")
+    local resetButton = CreateFrame("Button", nil, scrollChild, "UIPanelButtonTemplate")
     resetButton:SetSize(120, 24)
     resetButton:SetPoint("TOPLEFT", heightSlider, "BOTTOMLEFT", 0, -30)
     resetButton:SetText("Reset Position")
@@ -523,19 +775,33 @@ end)
         print("Unit frame position reset to default.")
     end)
 
+    -- Test Mode Button
+    local testButton = CreateFrame("Button", nil, scrollChild, "UIPanelButtonTemplate")
+    testButton:SetSize(120, 24)
+    testButton:SetPoint("LEFT", resetButton, "RIGHT", 10, 0)
+    testButton:SetText("Toggle Test Mode")
+    testButton:SetScript("OnClick", function()
+        testMode = not testMode
+        if testMode then
+            ShowTestFrames()
+        else
+            HideTestFrames()
+        end
+    end)
+
     -- Tracked Spells Label
-    local trackedLabel = configFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local trackedLabel = scrollChild:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     trackedLabel:SetPoint("TOPLEFT", resetButton, "BOTTOMLEFT", 0, -20)
     trackedLabel:SetText("Tracked Spells (" .. (playerClass or "Unknown") .. ")")
 
     -- ScrollFrame for spell list
-    local scrollFrame = CreateFrame("ScrollFrame", nil, configFrame, "UIPanelScrollFrameTemplate")
-    scrollFrame:SetPoint("TOPLEFT", trackedLabel, "BOTTOMLEFT", 0, -5)
-    scrollFrame:SetSize(180, 80)
+    local spellListScrollFrame = CreateFrame("ScrollFrame", nil, scrollChild, "UIPanelScrollFrameTemplate")
+    spellListScrollFrame:SetPoint("TOPLEFT", trackedLabel, "BOTTOMLEFT", 0, -5)
+    spellListScrollFrame:SetSize(180, 80)
 
-    local spellList = CreateFrame("Frame", nil, scrollFrame)
+    local spellList = CreateFrame("Frame", nil, spellListScrollFrame)
     spellList:SetSize(180, 80)
-    scrollFrame:SetScrollChild(spellList)
+    spellListScrollFrame:SetScrollChild(spellList)
 
     local function RefreshSpellList()
         -- Remove all previous children (fontstrings and buttons)
@@ -570,18 +836,18 @@ end)
     end
 
     -- Add SpellID input
-    local addBoxLabel = configFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    addBoxLabel:SetPoint("BOTTOMLEFT", scrollFrame, "BOTTOMLEFT", 5, -15)
+    local addBoxLabel = scrollChild:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    addBoxLabel:SetPoint("BOTTOMLEFT", spellListScrollFrame, "BOTTOMLEFT", 5, -15)
     addBoxLabel:SetText("Drag a spell here or enter a SpellID:")
 
-    local addBox = CreateFrame("EditBox", nil, configFrame, "InputBoxTemplate")
+    local addBox = CreateFrame("EditBox", nil, scrollChild, "InputBoxTemplate")
     addBox:SetSize(60, 20)
     addBox:SetPoint("TOPLEFT", addBoxLabel, "BOTTOMLEFT", 0, -2)
     addBox:SetAutoFocus(false)
     addBox:SetNumeric(true)
     addBox:SetMaxLetters(7)
 
-    local addButton = CreateFrame("Button", nil, configFrame, "UIPanelButtonTemplate")
+    local addButton = CreateFrame("Button", nil, scrollChild, "UIPanelButtonTemplate")
     addButton:SetSize(80, 20)
     addButton:SetPoint("LEFT", addBox, "RIGHT", 5, 0)
     addButton:SetText("Add")
@@ -603,6 +869,19 @@ end)
         print("Added spellID:", spellID)
     end)
 
+    local resetSpellsButton = CreateFrame("Button", nil, scrollChild, "UIPanelButtonTemplate")
+    resetSpellsButton:SetSize(60, 20)
+    resetSpellsButton:SetPoint("LEFT", addButton, "RIGHT", 5, 0)
+    resetSpellsButton:SetText("Reset")
+    resetSpellsButton:SetScript("OnClick", function()
+        local _, playerClass = UnitClass("player")
+        if ZUF_Defaults and ZUF_Defaults.trackedSpells and ZUF_Defaults.trackedSpells[playerClass] then
+            ZUF_Settings.trackedSpells[playerClass] = CopyTable(ZUF_Defaults.trackedSpells[playerClass])
+            RefreshSpellList()
+            print("Tracked spells reset to defaults for " .. playerClass)
+        end
+    end)
+
     addBox:SetScript("OnReceiveDrag", function(self)
     local type, id, subType = GetCursorInfo()
     if type == "spell" then
@@ -613,7 +892,7 @@ end)
         end
     end
     ClearCursor()
-end)
+    end)
 
     addBox:SetScript("OnMouseUp", function(self, button)
         if button == "RightButton" then
@@ -621,6 +900,114 @@ end)
         end
     end)
 
+        -- Tracked Buffs Label
+    local trackedBuffsLabel = scrollChild:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    trackedBuffsLabel:SetPoint("TOPLEFT", addBox, "BOTTOMLEFT", 0, -30)
+    trackedBuffsLabel:SetText("Tracked Buffs (" .. (playerClass or "Unknown") .. ")")
+
+    -- ScrollFrame for buffs list
+    local buffsListScrollFrame = CreateFrame("ScrollFrame", nil, scrollChild, "UIPanelScrollFrameTemplate")
+    buffsListScrollFrame:SetPoint("TOPLEFT", trackedBuffsLabel, "BOTTOMLEFT", 0, -5)
+    buffsListScrollFrame:SetSize(180, 80)
+
+    local buffsList = CreateFrame("Frame", nil, buffsListScrollFrame)
+    buffsList:SetSize(180, 80)
+    buffsListScrollFrame:SetScrollChild(buffsList)
+
+    local function RefreshBuffsList()
+        for _, child in ipairs({buffsList:GetChildren()}) do
+            child:Hide()
+            child:SetParent(nil)
+        end
+        local tracked = ZUF_Settings.trackedBuffs and ZUF_Settings.trackedBuffs[playerClass] or {}
+        for i, spellID in ipairs(tracked) do
+            local name, _, icon = GetSpellInfo(spellID)
+            local rowFrame = CreateFrame("Frame", nil, buffsList)
+            rowFrame:SetSize(180, 16)
+            rowFrame:SetPoint("TOPLEFT", buffsList, "TOPLEFT", 0, -((i-1)*16))
+
+            local rowText = rowFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            rowText:SetPoint("LEFT", rowFrame, "LEFT", 0, 0)
+            rowText:SetText((icon and "|T"..icon..":14|t " or "") .. (name or "Unknown") .. " (" .. spellID .. ")")
+            rowText:Show()
+
+            local removeBtn = CreateFrame("Button", nil, rowFrame, "UIPanelButtonTemplate")
+            removeBtn:SetSize(18, 16)
+            removeBtn:SetPoint("LEFT", rowText, "RIGHT", 5, 0)
+            removeBtn:SetText("X")
+            removeBtn:SetScript("OnClick", function()
+                table.remove(ZUF_Settings.trackedBuffs[playerClass], i)
+                RefreshBuffsList()
+            end)
+            removeBtn:Show()
+        end
+    end
+
+    -- Add SpellID input for buffs
+    local addBuffBoxLabel = scrollChild:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    addBuffBoxLabel:SetPoint("BOTTOMLEFT", buffsListScrollFrame, "BOTTOMLEFT", 5, -15)
+    addBuffBoxLabel:SetText("Drag a spell here or enter a SpellID:")
+
+    local addBuffBox = CreateFrame("EditBox", nil, scrollChild, "InputBoxTemplate")
+    addBuffBox:SetSize(60, 20)
+    addBuffBox:SetPoint("TOPLEFT", addBuffBoxLabel, "BOTTOMLEFT", 0, -2)
+    addBuffBox:SetAutoFocus(false)
+    addBuffBox:SetNumeric(true)
+    addBuffBox:SetMaxLetters(7)
+
+    local addBuffButton = CreateFrame("Button", nil, scrollChild, "UIPanelButtonTemplate")
+    addBuffButton:SetSize(80, 20)
+    addBuffButton:SetPoint("LEFT", addBuffBox, "RIGHT", 5, 0)
+    addBuffButton:SetText("Add")
+
+    addBuffButton:SetScript("OnClick", function()
+        local spellID = tonumber(addBuffBox:GetText())
+        if not spellID then return end
+        local _, playerClass = UnitClass("player")
+        if not ZUF_Settings.trackedBuffs[playerClass] then
+            ZUF_Settings.trackedBuffs[playerClass] = {}
+        end
+        for _, id in ipairs(ZUF_Settings.trackedBuffs[playerClass]) do
+            if id == spellID then return end
+        end
+        table.insert(ZUF_Settings.trackedBuffs[playerClass], spellID)
+        addBuffBox:SetText("")
+        RefreshBuffsList()
+        print("Added tracked buff spellID:", spellID)
+    end)
+
+    local resetBuffsButton = CreateFrame("Button", nil, scrollChild, "UIPanelButtonTemplate")
+    resetBuffsButton:SetSize(60, 20)
+    resetBuffsButton:SetPoint("LEFT", addBuffButton, "RIGHT", 5, 0)
+    resetBuffsButton:SetText("Reset")
+    resetBuffsButton:SetScript("OnClick", function()
+        local _, playerClass = UnitClass("player")
+        if ZUF_Defaults and ZUF_Defaults.trackedBuffs and ZUF_Defaults.trackedBuffs[playerClass] then
+            ZUF_Settings.trackedBuffs[playerClass] = CopyTable(ZUF_Defaults.trackedBuffs[playerClass])
+            RefreshBuffsList()
+            print("Tracked buffs reset to defaults for " .. playerClass)
+        end
+    end)
+
+    addBuffBox:SetScript("OnReceiveDrag", function(self)
+        local type, id, subType = GetCursorInfo()
+        if type == "spell" then
+            local spellName, spellSubName = GetSpellBookItemName(id, "spell")
+            local spellId = select(7, GetSpellInfo(spellName, spellSubName))
+            if spellId then
+                self:SetText(tostring(spellId))
+            end
+        end
+        ClearCursor()
+    end)
+
+    addBuffBox:SetScript("OnMouseUp", function(self, button)
+        if button == "RightButton" then
+            self:SetText("")
+        end
+    end)
+
+    RefreshBuffsList()
     RefreshSpellList()
 
     configFrame:Hide() -- Initially hidden
@@ -705,7 +1092,9 @@ f:SetScript("OnEvent", function(self, event, arg1)
         else
             print("ZUF_Settings loaded")
         end
-
+        if not ZUF_Settings.trackedBuffs then
+            ZUF_Settings.trackedBuffs = {}
+        end
         -- Load saved settings into frameSettings
         frameSettings = ZUF_Settings.frameSettings
         local _, playerClass = UnitClass("player")
