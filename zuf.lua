@@ -5,7 +5,7 @@ local LSM = LibStub("LibSharedMedia-3.0")
 LSM:Register("statusbar", "Smooth", "Interface\\AddOns\\zindure-unit-frames\\media\\ElvUI2.tga")
 LSM:Register("font", "MyFont", "Interface\\AddOns\\zindure-unit-frames\\media\\Arial.ttf")
 
--- Variables for frame settings
+--[[ -- Variables for frame settings
 frameSettings = {
     isMovable = false,
     layout = "vertical", -- "vertical" or "horizontal"
@@ -13,7 +13,7 @@ frameSettings = {
     frameHeight = 25,
     baseX = 30, -- Base X offset
     baseY = -40, -- Base Y offset
-}
+} ]]
 
 local testMode = false
 local testFrames = {}
@@ -61,23 +61,48 @@ local function HideBlizzardFrames()
     if isChecking then return end
     isChecking = true
 
-    -- Hide old-style party frames if they are shown
-    for i = 1, 4 do
-        local frame = _G["PartyMemberFrame" .. i]
-        if frame and frame:IsShown() then
-            frame:UnregisterAllEvents()
-            frame:SetParent(hiddenFrame)
-            frame:Hide()
+    if not IsInRaid() then
+        -- Hide old-style party frames if they are shown
+        for i = 1, 4 do
+            local frame = _G["PartyMemberFrame" .. i]
+            if frame and frame:IsShown() then
+                frame:UnregisterAllEvents()
+                frame:SetParent(hiddenFrame)
+                frame:Hide()
+            end
+        end
+        -- Hide new-style compact party frame if it is shown
+        if CompactPartyFrame and CompactPartyFrame:IsShown() then
+            CompactPartyFrame:UnregisterAllEvents()
+            CompactPartyFrame:SetParent(hiddenFrame)
+            CompactPartyFrame:Hide()
+        end
+        -- Hide raid-style party frames (CompactRaidFrameManager and Container)
+        if CompactRaidFrameManager then
+            CompactRaidFrameManager:UnregisterAllEvents()
+            CompactRaidFrameManager:SetParent(hiddenFrame)
+            CompactRaidFrameManager:Hide()
+        end
+        if CompactRaidFrameContainer then
+            CompactRaidFrameContainer:UnregisterAllEvents()
+            CompactRaidFrameContainer:SetParent(hiddenFrame)
+            CompactRaidFrameContainer:Hide()
+        end
+    else
+        -- In a raid: restore Blizzard raid frames
+        if CompactRaidFrameManager then
+            CompactRaidFrameManager:SetParent(UIParent)
+            CompactRaidFrameManager:Show()
+            CompactRaidFrameManager:RegisterEvent("GROUP_ROSTER_UPDATE")
+            CompactRaidFrameManager:RegisterEvent("PLAYER_ENTERING_WORLD")
+            -- Add any other events you want to restore
+        end
+        if CompactRaidFrameContainer then
+            CompactRaidFrameContainer:SetParent(UIParent)
+            CompactRaidFrameContainer:Show()
         end
     end
-    -- Hide new-style compact party frame if it is shown
-    if CompactPartyFrame and CompactPartyFrame:IsShown() then
-        CompactPartyFrame:UnregisterAllEvents()
-        CompactPartyFrame:SetParent(hiddenFrame)
-        CompactPartyFrame:Hide()
-    end
 
-    -- Reset the flag after the function finishes
     isChecking = false
 end
 
@@ -815,7 +840,7 @@ local function CreateConfigWindow()
             -- Create a container frame for the row
             local rowFrame = CreateFrame("Frame", nil, spellList)
             rowFrame:SetSize(180, 16)
-            rowFrame:SetPoint("TOPLEFT", spellList, "TOPLEFT", 0, -((i-1)*16))
+            rowFrame:SetPoint("TOPLEFT", buffsList, "TOPLEFT", 0, -((i-1)*16))
 
             local rowText = rowFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
             rowText:SetPoint("LEFT", rowFrame, "LEFT", 0, 0)
@@ -1087,7 +1112,19 @@ f:SetScript("OnEvent", function(self, event, arg1)
         
         -- Initialize saved variables if they don't exist
         if ZUF_Settings == nil then
-            print("Initializing saved variables for Zindure's Unit Frames")
+            if not ZUF_Defaults then
+                -- Show error popup
+                StaticPopupDialogs["ZUF_MISSING_DEFAULTS"] = {
+                    text = "Zindure's Unit Frames: Critical error!\n\nZUF_Defaults is missing.\nPlease reinstall the addon.",
+                    button1 = "OK",
+                    timeout = 0,
+                    whileDead = true,
+                    hideOnEscape = true,
+                }
+                StaticPopup_Show("ZUF_MISSING_DEFAULTS")
+                return -- Stop further loading
+            end
+            print("Initializing default variables for Zindure's Unit Frames")
             ZUF_Settings = CopyTable(ZUF_Defaults)
         else
             print("ZUF_Settings loaded")
@@ -1104,7 +1141,9 @@ f:SetScript("OnEvent", function(self, event, arg1)
         HideBlizzardFrames()
         CreateFrames()
     elseif event == "PLAYER_LOGIN" or event == "PLAYER_ENTERING_WORLD" or event == "GROUP_ROSTER_UPDATE" then
-        HideBlizzardFrames()
-        CreateFrames()
+        if ZUF_Settings and frameSettings then
+            HideBlizzardFrames()
+            CreateFrames()
+        end
     end
 end)
