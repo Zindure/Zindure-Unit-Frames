@@ -10,8 +10,8 @@ on:
         description: 'Name of the release'
         required: true
       release_body:
-        description: 'Description/body of the release (optional)'
-        required: false
+        description: 'Description/body of the release'
+        required: true
 
 permissions:
   contents: write  # ← This line is essential to allow creating releases
