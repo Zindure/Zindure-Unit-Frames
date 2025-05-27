@@ -10,5 +10,6 @@ defaults.lua
 Init.lua
 TestFrames.lua
 Frames.lua
+RaidFrames.lua
 Options.lua
 zuf.lua

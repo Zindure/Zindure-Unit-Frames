@@ -1,64 +1,59 @@
--- Party/Raid frame logic
+-- Raid frame logic
 
-function UpdateFramePositions()
-    for i, frame in ipairs(partyFrames) do
+function UpdateRaidFramePositions()
+    local groupSize = 5
+    local spacing = 5
+    local groupSpacing = 5
+
+    for i, frame in ipairs(raidFrames) do
         frame:ClearAllPoints()
-        if frameSettings.layout == "vertical" then
-            if i == 1 then
-                frame:SetPoint("TOPLEFT", UIParent, "TOPLEFT", frameSettings.baseX, frameSettings.baseY)
-            else
-                frame:SetPoint("TOPLEFT", partyFrames[i - 1], "BOTTOMLEFT", 0, -10)
-            end
+        if i == 1 then
+            frame:SetParent(UIParent)
+            frame:SetPoint("TOPLEFT", UIParent, "TOPLEFT", raidFrameSettings.baseX, raidFrameSettings.baseY)
         else
-            if i == 1 then
-                frame:SetPoint("TOPLEFT", UIParent, "TOPLEFT", frameSettings.baseX, frameSettings.baseY)
+            -- Ensure all other frames are parented to the first raid frame
+            frame:SetParent(raidFrames[1])
+            local groupIndex = math.floor((i - 1) / groupSize)
+            local indexInGroup = (i - 1) % groupSize
+            if raidFrameSettings.layout == "vertical" then
+                local x = groupIndex * (raidFrameSettings.frameWidth + groupSpacing)
+                local y = -indexInGroup * (raidFrameSettings.frameHeight + spacing)
+                frame:SetPoint("TOPLEFT", raidFrames[1], "TOPLEFT", x, y)
             else
-                frame:SetPoint("TOPLEFT", partyFrames[i - 1], "TOPRIGHT", 10, 0)
+                local x = indexInGroup * (raidFrameSettings.frameWidth + spacing)
+                local y = -groupIndex * (raidFrameSettings.frameHeight + groupSpacing)
+                frame:SetPoint("TOPLEFT", raidFrames[1], "TOPLEFT", x, y)
             end
         end
-        frame:SetSize(frameSettings.frameWidth, frameSettings.frameHeight)
-        frame.healthBar:SetHeight(frameSettings.frameHeight - powerBarHeight)
+        frame:SetSize(raidFrameSettings.frameWidth, raidFrameSettings.frameHeight)
+        frame.healthBar:SetHeight(raidFrameSettings.frameHeight - powerBarHeight)
         frame.powerBar:SetHeight(powerBarHeight)
     end
 end
 
--- Create one unit frame
-function CreateUnitFrame(unit, index)
-    local frame = CreateFrame("Button", "CF_UnitFrame"..index, UIParent, "SecureUnitButtonTemplate")
-    frame:SetSize(frameSettings.frameWidth, frameSettings.frameHeight)
+function CreateRaidUnitFrame(unit, index)
+    local parent = index == 1 and UIParent or raidFrames[1]
+    local frame = CreateFrame("Button", "CF_RaidUnitFrame"..index, parent, "SecureUnitButtonTemplate")
+    frame:SetSize(raidFrameSettings.frameWidth, raidFrameSettings.frameHeight)
 
-    if index > 1 then
-        frame:SetPoint("TOPLEFT", partyFrames[index - 1], "BOTTOMLEFT", 0, -10)
-    else
-        frame:SetPoint("TOPLEFT", UIParent, "TOPLEFT", frameSettings.baseX, frameSettings.baseY)
-
-        -- Add drag functionality for the first frame
+    if index == 1 then
         frame:EnableMouse(true)
-        frame:SetMovable(frameSettings.isMovable)
-        if frameSettings.isMovable then
+        frame:SetMovable(raidFrameSettings.isMovable)
+        if raidFrameSettings.isMovable then
             frame:RegisterForDrag("LeftButton")
             frame:SetScript("OnDragStart", frame.StartMoving)
             frame:SetScript("OnDragStop", function(self)
                 self:StopMovingOrSizing()
-                -- Always get position relative to TOPLEFT of UIParent
                 local xOfs, yOfs = self:GetLeft(), self:GetTop()
                 local parentLeft, parentTop = UIParent:GetLeft(), UIParent:GetTop()
-                -- Calculate offsets from UIParent's TOPLEFT
                 local baseX = xOfs - parentLeft
                 local baseY = yOfs - parentTop
-                -- Save
-                frameSettings.baseX = baseX
-                frameSettings.baseY = baseY
+                raidFrameSettings.baseX = baseX
+                raidFrameSettings.baseY = baseY
                 EnsureSavedVariables()
-                ZUF_Settings.frameSettings.baseX = baseX
-                ZUF_Settings.frameSettings.baseY = baseY
-
-                -- Re-apply unit/click attributes
-                self:SetAttribute("unit", self.unit or "player")
-                self:RegisterForClicks("AnyUp")
-                self:SetAttribute("type1", "target")
-                self:SetAttribute("type2", "togglemenu")
-                UpdateFramePositions()
+                ZUF_Settings.raidFrameSettings.baseX = baseX
+                ZUF_Settings.raidFrameSettings.baseY = baseY
+                UpdateRaidFramePositions()
             end)
         else
             frame:RegisterForDrag()
@@ -78,7 +73,7 @@ function CreateUnitFrame(unit, index)
     frame.healthBar:SetStatusBarColor(0.2, 0.9, 0.2)
     frame.healthBar:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
     frame.healthBar:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, 0)
-    frame.healthBar:SetHeight(frameSettings.frameHeight - powerBarHeight)
+    frame.healthBar:SetHeight(raidFrameSettings.frameHeight - powerBarHeight)
 
     -- Power bar
     frame.powerBar = CreateFrame("StatusBar", nil, frame)
@@ -88,14 +83,14 @@ function CreateUnitFrame(unit, index)
     frame.powerBar:SetHeight(powerBarHeight)
     frame.powerBar:SetMinMaxValues(0, 100)
     frame.powerBar:SetValue(100)
-    frame.powerBar:SetStatusBarColor(0, 0.4, 1) -- Default to mana blue
+    frame.powerBar:SetStatusBarColor(0, 0.4, 1)
 
     -- Name text
     frame.nameText = frame.healthBar:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    frame.nameText:SetFont(LSM:Fetch("font", "MyFont"), 12, "OUTLINE")
+    frame.nameText:SetFont(LSM:Fetch("font", "MyFont"), 8, "OUTLINE")
     frame.nameText:SetPoint("CENTER", frame.healthBar, "CENTER")
 
-    -- Effect icons container (bottom left of health bar
+    -- Effect icons container (bottom left of health bar)
     frame.effectIcons = CreateFrame("Frame", nil, frame.healthBar)
     frame.effectIcons:SetPoint("BOTTOMLEFT", frame.healthBar, "BOTTOMLEFT", 2, 2)
     frame.effectIcons:SetSize(60, 16)
@@ -160,14 +155,14 @@ function CreateUnitFrame(unit, index)
                 else
                     self:SetAlpha(1)
                 end
-             if color then
-                self.healthBar:SetStatusBarColor(color.r, color.g, color.b)
-             else
-                self.healthBar:SetStatusBarColor(0.2, 0.9, 0.2)
-            end
+                if color then
+                    self.healthBar:SetStatusBarColor(color.r, color.g, color.b)
+                else
+                    self.healthBar:SetStatusBarColor(0.2, 0.9, 0.2)
+                end
 
-            self.powerBar:SetStatusBarColor(0, 0.4, 1)
-            self.nameText:SetText(UnitName(unit) or "")
+                self.powerBar:SetStatusBarColor(0, 0.4, 1)
+                self.nameText:SetText(UnitName(unit) or "")
             end
 
             local hp = UnitHealth(unit)
@@ -175,9 +170,7 @@ function CreateUnitFrame(unit, index)
             if maxHp > 0 then
                 self.healthBar:SetMinMaxValues(0, maxHp)
                 self.healthBar:SetValue(hp)
-                -- frame.healthText:SetText(hp .. " / " .. maxHp)
             end
-
 
             -- Power bar update
             local powerType = UnitPowerType(unit)
@@ -189,7 +182,6 @@ function CreateUnitFrame(unit, index)
             self.powerBar:SetStatusBarColor(r, g, b)
 
             -- EFFECT TRACKING (trackedSpells)
-            -- Hide and release previous effect icons and cooldowns
             for _, icon in ipairs(self.effectIcons.icons) do
                 icon:Hide()
                 if icon.cooldown then icon.cooldown:Hide() end
@@ -240,7 +232,6 @@ function CreateUnitFrame(unit, index)
             end
 
             -- BUFF TRACKING (trackedBuffs)
-            -- Hide and release previous buff icons and cooldowns
             for _, icon in ipairs(self.buffIcons.icons) do
                 icon:Hide()
                 if icon.cooldown then icon.cooldown:Hide() end
@@ -300,76 +291,62 @@ function CreateUnitFrame(unit, index)
                 self.healPredictionBar:SetMinMaxValues(0, maxHp)
                 self.healPredictionBar:SetValue(math.min(hp + heal, maxHp))
                 self.healPredictionBar:Show()
-                -- Set the frame level above the health bar so it's visible
                 self.healPredictionBar:SetFrameLevel(self.healthBar:GetFrameLevel() - 1)
-                -- Make the heal prediction bar partially transparent
                 self.healPredictionBar:SetAlpha(0.6)
-                -- Optionally, set a different color for the prediction
                 self.healPredictionBar:SetStatusBarColor(0, 1, 0, 0.4)
-                -- Make sure the health bar is drawn above the background but below the prediction bar
                 self.healthBar:SetFrameLevel(self.healPredictionBar:GetFrameLevel() + 1)
             else
                 self.healPredictionBar:Hide()
             end
-            
         end
     end)
 
     -- Healing prediction bar (overlay)
     frame.healPredictionBar = CreateFrame("StatusBar", nil, frame)
     frame.healPredictionBar:SetStatusBarTexture(LSM:Fetch("statusbar", "Smooth"))
-    frame.healPredictionBar:SetStatusBarColor(0, 1, 0, 0.4) -- Green, semi-transparent
+    frame.healPredictionBar:SetStatusBarColor(0, 1, 0, 0.4)
     frame.healPredictionBar:SetFrameLevel(frame.healthBar:GetFrameLevel() + 1)
     frame.healPredictionBar:SetPoint("TOPLEFT", frame.healthBar, "TOPLEFT")
     frame.healPredictionBar:SetPoint("BOTTOMRIGHT", frame.healthBar, "BOTTOMRIGHT")
     frame.healPredictionBar:Hide()
 
-    table.insert(partyFrames, frame)
+    table.insert(raidFrames, frame)
     return frame
 end
 
--- Create frames for player + 4 party members
-partyUnits = { "player", "party1", "party2", "party3", "party4" }
-function CreateFrames()
+-- Create frames for raid members
+function CreateRaidFrames()
     -- Hide and clear old frames
-    for _, frame in ipairs(partyFrames) do
+    for _, frame in ipairs(raidFrames) do
         frame:Hide()
         frame:SetParent(nil)
     end
-    wipe(partyFrames)
+    wipe(raidFrames)
 
-    if frameSettings.isMovable then
-        -- Always show 5 frames with placeholders
-        local units = { "player", "party1", "party2", "party3", "party4" }
-        for i, unit in ipairs(units) do
-            if UnitExists(unit) then
-                CreateUnitFrame(unit, i)
-            else
-                -- Use "player" as a placeholder for missing units
-                local frame = CreateUnitFrame("player", i)
-                frame.nameText:SetText("Placeholder " .. i)
-                frame.healthBar:SetValue(math.random(30, 100)) -- Random health for visual variety
-            end
-            UpdateFramePositions()
-        end
-    else
-        local units = { "player" }
-        for i = 1, 4 do
-            local unit = "party" .. i
-            if UnitExists(unit) then
-                table.insert(units, unit)
-            end
-        end
-        for i, unit in ipairs(units) do
-            CreateUnitFrame(unit, i)
-            UpdateFramePositions()
+    -- Create up to 40 raid frames (WoW Classic max raid size)
+    for i = 1, 40 do
+        local unit = "raid" .. i
+        if UnitExists(unit) then
+            CreateRaidUnitFrame(unit, i)
+        elseif raidFrameSettings.isMovable then
+            -- Create placeholder frame
+            local frame = CreateRaidUnitFrame(nil, i)
+            frame.nameText:SetText("Player" .. i)
+            frame.healthBar:SetMinMaxValues(0, 1)
+            frame.healthBar:SetValue(1)
+            frame.healthBar:SetStatusBarColor(0.3, 0.3, 0.3)
+            frame.powerBar:SetMinMaxValues(0, 1)
+            frame.powerBar:SetValue(1)
+            frame.powerBar:SetStatusBarColor(0.1, 0.1, 0.1)
+            frame:SetAlpha(0.5)
         end
     end
+    UpdateRaidFramePositions()
 end
 
-function HidePartyFrames()
-    if partyFrames then
-        for _, frame in ipairs(partyFrames) do
+function HideRaidFrames()
+    if raidFrames then
+        for _, frame in ipairs(raidFrames) do
             frame:Hide()
         end
     end

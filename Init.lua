@@ -8,11 +8,16 @@ LSM:Register("font", "MyFont", "Interface\\AddOns\\zindure-unit-frames\\media\\A
 
 testMode = false
 testFrames = {}
+raidTestFrames = {}
 EFFECT_SPELLIDS = {}
 powerBarHeight = 6
 
 partyFrames = {}
-frameSettings = nil -- will be set from saved variables
+raidFrames = {}
+frameSettings = nil
+raidFrameSettings = nil
+
+raidToggled = nil
 
 local hiddenFrame = CreateFrame("Frame")
 hiddenFrame:Hide()
@@ -23,6 +28,17 @@ function EnsureSavedVariables()
             isMovable = false,
             layout = "vertical",
             frameWidth = 150,
+            frameHeight = 25,
+            baseX = 30,
+            baseY = -40,
+        }
+    end
+    if ZUF_Settings.raidFrameSettings == nil then
+        ZUF_Settings.raidFrameSettings = {
+            isToggled= true,
+            isMovable = false,
+            layout = "horizontal",
+            frameWidth = 75,
             frameHeight = 25,
             baseX = 30,
             baseY = -40,

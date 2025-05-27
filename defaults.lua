@@ -7,6 +7,15 @@ ZUF_Defaults = {
         baseX = 30,
         baseY = -40,
     },
+    raidFrameSettings = {
+        isToggled= true,
+        isMovable = false,
+        layout = "horizontal",
+        frameWidth = 75,
+        frameHeight = 25,
+        baseX = 30,
+        baseY = -40,
+    },
     trackedSpells = {
         PRIEST = {401859, 401863, 25315, 10901, 425207},
         DRUID  = {408124, 417068, 417146, 29166, 9857, 25299, 9863, 408120},

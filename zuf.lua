@@ -1,51 +1,37 @@
 -- Smart hiding function: only runs logic if frames are actually visible
-local function HideBlizzardFrames()
+function HideBlizzardFrames()
     -- Avoid re-running the function if it's already running
     if isChecking then return end
     isChecking = true
-
-    if not IsInRaid() then
-        -- Hide old-style party frames if they are shown
-        for i = 1, 4 do
-            local frame = _G["PartyMemberFrame" .. i]
-            if frame and frame:IsShown() then
-                frame:UnregisterAllEvents()
-                frame:SetParent(hiddenFrame)
-                frame:Hide()
-            end
+    -- Hide old-style party frames if they are shown
+    for i = 1, 4 do
+        local frame = _G["PartyMemberFrame" .. i]
+        if frame and frame:IsShown() then
+            frame:UnregisterAllEvents()
+            frame:SetParent(hiddenFrame)
+            frame:Hide()
         end
-        -- Hide new-style compact party frame if it is shown
-        if CompactPartyFrame and CompactPartyFrame:IsShown() then
-            CompactPartyFrame:UnregisterAllEvents()
-            CompactPartyFrame:SetParent(hiddenFrame)
-            CompactPartyFrame:Hide()
-        end
-        -- Hide raid-style party frames (CompactRaidFrameManager and Container)
-        if CompactRaidFrameManager then
-            CompactRaidFrameManager:UnregisterAllEvents()
-            CompactRaidFrameManager:SetParent(hiddenFrame)
-            CompactRaidFrameManager:Hide()
-        end
+    end
+    -- Hide new-style compact party frame if it is shown
+    if CompactPartyFrame and CompactPartyFrame:IsShown() then
+        CompactPartyFrame:UnregisterAllEvents()
+        CompactPartyFrame:SetParent(hiddenFrame)
+        CompactPartyFrame:Hide()
+    end
+    if raidToggled then
         if CompactRaidFrameContainer then
             CompactRaidFrameContainer:UnregisterAllEvents()
             CompactRaidFrameContainer:SetParent(hiddenFrame)
             CompactRaidFrameContainer:Hide()
         end
-    else
-        -- In a raid: restore Blizzard raid frames
-        if CompactRaidFrameManager then
-            CompactRaidFrameManager:SetParent(UIParent)
-            CompactRaidFrameManager:Show()
-            CompactRaidFrameManager:RegisterEvent("GROUP_ROSTER_UPDATE")
-            CompactRaidFrameManager:RegisterEvent("PLAYER_ENTERING_WORLD")
-            -- Add any other events you want to restore
-        end
+    end
+    if IsInRaid() and not raidToggled then
         if CompactRaidFrameContainer then
             CompactRaidFrameContainer:SetParent(UIParent)
             CompactRaidFrameContainer:Show()
+            CompactRaidFrameContainer:RegisterAllEvents()
         end
     end
-
     isChecking = false
 end
 
@@ -144,16 +130,40 @@ f:SetScript("OnEvent", function(self, event, arg1)
         end
         -- Load saved settings into frameSettings
         frameSettings = ZUF_Settings.frameSettings
+
+        if not ZUF_Settings.raidFrameSettings then
+            ZUF_Settings.raidFrameSettings = CopyTable(ZUF_Defaults.raidFrameSettings)
+            raidFrameSettings = ZUF_Settings.raidFrameSettings
+        else 
+            raidFrameSettings = ZUF_Settings.raidFrameSettings
+        end
+
         local _, playerClass = UnitClass("player")
         EFFECT_SPELLIDS = (ZUF_Settings.trackedSpells and ZUF_Settings.trackedSpells[playerClass]) or {}
+        BUFF_SPELLIDS = (ZUF_Settings.trackedBuffs and ZUF_Settings.trackedBuffs[playerClass]) or {}
+        raidToggled = ZUF_Settings.raidFrameSettings.isToggled
 
-        -- Initialize layout and visibility
+        if IsInRaid() and ZUF_Settings.raidFrameSettings.IsToggled then
+            CreateRaidFrames()
+        else
+            CreateFrames()
+        end
         HideBlizzardFrames()
-        CreateFrames()
+        C_Timer.After(5, HideBlizzardFrames)
+        C_Timer.After(10, HideBlizzardFrames)
+
     elseif event == "PLAYER_LOGIN" or event == "PLAYER_ENTERING_WORLD" or event == "GROUP_ROSTER_UPDATE" then
         if ZUF_Settings and frameSettings then
             HideBlizzardFrames()
-            CreateFrames()
+            if IsInRaid() and raidToggled then
+                HidePartyFrames()
+                CreateRaidFrames()
+            elseif IsInRaid() and not raidToggled then
+                HidePartyFrames()
+            else
+                HideRaidFrames()
+                CreateFrames()
+            end
         end
     end
 end)
