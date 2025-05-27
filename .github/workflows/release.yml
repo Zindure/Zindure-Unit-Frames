@@ -14,7 +14,7 @@ on:
         required: true
 
 permissions:
-  contents: write  # ← This line is essential to allow creating releases
+  contents: write
 
 jobs:
   build-release:
@@ -43,19 +43,12 @@ jobs:
         cd release
         zip -r ../$ZIP_NAME .
 
-    - name: Read changelog for release body
-      id: changelog
-      run: |
-        echo "body<<EOF" >> $GITHUB_ENV
-        cat changelog.md >> $GITHUB_ENV
-        echo "EOF" >> $GITHUB_ENV
-
     - name: Create GitHub release
       uses: softprops/action-gh-release@v2
       with:
         tag_name: ${{ github.event.inputs.release_tag }}
         name: ${{ format('Release {0}', github.event.inputs.release_tag) }}
-        body: ${{ env.body }}
+        body_path: changelog.md
         files: ${{ env.ZIP_NAME }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
