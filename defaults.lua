@@ -12,7 +12,7 @@ ZUF_Defaults = {
         isMovable = false,
         layout = "horizontal",
         frameWidth = 75,
-        frameHeight = 25,
+        frameHeight = 45,
         baseX = 30,
         baseY = -40,
     },

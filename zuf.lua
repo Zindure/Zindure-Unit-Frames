@@ -18,18 +18,52 @@ function HideBlizzardFrames()
         CompactPartyFrame:SetParent(hiddenFrame)
         CompactPartyFrame:Hide()
     end
-    if raidToggled then
+    if raidToggled and IsInRaid() then
         if CompactRaidFrameContainer then
             CompactRaidFrameContainer:UnregisterAllEvents()
             CompactRaidFrameContainer:SetParent(hiddenFrame)
             CompactRaidFrameContainer:Hide()
         end
+        -- Hide Blizzard Main Tank and Main Assist frames
+        for i = 1, 8 do -- 8 is a safe upper bound for raid groups
+            local tankFrame = _G["CompactRaidGroup"..i.."MainTank"]
+            local assistFrame = _G["CompactRaidGroup"..i.."MainAssist"]
+            if tankFrame then
+                tankFrame:UnregisterAllEvents()
+                tankFrame:SetParent(hiddenFrame)
+                tankFrame:Hide()
+            end
+            if assistFrame then
+                assistFrame:UnregisterAllEvents()
+                assistFrame:SetParent(hiddenFrame)
+                assistFrame:Hide()
+            end
+        end
     end
     if IsInRaid() and not raidToggled then
+        -- Ensure Blizzard Raid UI is loaded
+        if not IsAddOnLoaded("Blizzard_RaidUI") then
+            LoadAddOn("Blizzard_RaidUI")
+        end
+
+        -- Set Blizzard Raid UI to shown
+        if CompactRaidFrameManager_SetSetting then
+
+            CompactRaidFrameManager_SetSetting("IsShown", 1)
+        end
+
+        if CompactRaidFrameManager then
+            CompactRaidFrameManager:SetParent(UIParent)
+            CompactRaidFrameManager:Show()
+        end
         if CompactRaidFrameContainer then
             CompactRaidFrameContainer:SetParent(UIParent)
             CompactRaidFrameContainer:Show()
             CompactRaidFrameContainer:RegisterAllEvents()
+            -- Force a layout update (sometimes needed)
+            if CompactRaidFrameContainer.flowFrames and type(CompactRaidFrameContainer.Layout) == "function" then
+                CompactRaidFrameContainer:Layout()
+            end
         end
     end
     isChecking = false
@@ -97,11 +131,20 @@ minimapButton:SetScript("OnLeave", function(self)
     GameTooltip:Hide()
 end)
 
+-- Watchdog to keep Blizzard frames hidden
+local function StartBlizzardFrameWatchdog()
+    local interval = 2 -- seconds
+    local function watchdog()
+        HideBlizzardFrames()
+        C_Timer.After(interval, watchdog)
+    end
+    watchdog()
+end
+
 -- Init
 local f = CreateFrame("Frame")
 f:RegisterEvent("PLAYER_LOGIN")
 f:RegisterEvent("GROUP_ROSTER_UPDATE") -- Triggered when group composition changes
-f:RegisterEvent("PLAYER_ENTERING_WORLD") -- Triggered when entering the world
 f:RegisterEvent("ADDON_LOADED") -- Triggered when the addon is loaded
 f:SetScript("OnEvent", function(self, event, arg1)
     if event == "ADDON_LOADED" and arg1 == "zindure-unit-frames" then
@@ -152,18 +195,27 @@ f:SetScript("OnEvent", function(self, event, arg1)
         C_Timer.After(5, HideBlizzardFrames)
         C_Timer.After(10, HideBlizzardFrames)
 
-    elseif event == "PLAYER_LOGIN" or event == "PLAYER_ENTERING_WORLD" or event == "GROUP_ROSTER_UPDATE" then
+    elseif event == "PLAYER_LOGIN" or event == "GROUP_ROSTER_UPDATE" then
         if ZUF_Settings and frameSettings then
-            HideBlizzardFrames()
             if IsInRaid() and raidToggled then
                 HidePartyFrames()
                 CreateRaidFrames()
             elseif IsInRaid() and not raidToggled then
                 HidePartyFrames()
-            else
+            elseif IsInGroup() then
                 HideRaidFrames()
                 CreateFrames()
+            else
+                -- Not in a group or raid: hide all custom frames
+                HidePartyFrames()
+                HideRaidFrames()
             end
+            C_Timer.After(1, HideBlizzardFrames)
         end
+    end
+
+    -- Start watchdog after login
+    if event == "PLAYER_LOGIN" then
+        --[[ StartBlizzardFrameWatchdog() ]]
     end
 end)

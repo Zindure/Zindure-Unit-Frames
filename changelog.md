@@ -1,8 +1,8 @@
 ## Changelog
 
-- ✅ NEW ! Added raid frames alongside their very own test frames
-- ✅ Updated the options menu to reflect these changes
-- 🔧 Adjusted Icon size
+- 🪲 Fixed many raid frame bugs
+- 🪲 Fixed party frame showing when solo
+- 🔧 Adjusted raid frame size
 
 ---
 
