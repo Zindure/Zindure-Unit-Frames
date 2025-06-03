@@ -19,6 +19,13 @@ function HideBlizzardFrames()
         CompactPartyFrame:Hide()
     end
     if raidToggled and IsInRaid() then
+        
+        -- Move Blizzard Raid Frames off-screen if they try to show
+        if CompactRaidFrameContainer then
+            CompactRaidFrameContainer:ClearAllPoints()
+            CompactRaidFrameContainer:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", -1000, -1000)
+        end
+
         if CompactRaidFrameContainer then
             CompactRaidFrameContainer:UnregisterAllEvents()
             CompactRaidFrameContainer:SetParent(hiddenFrame)
@@ -41,11 +48,11 @@ function HideBlizzardFrames()
         end
     end
     if IsInRaid() and not raidToggled then
-        -- Ensure Blizzard Raid UI is loaded
-        if not IsAddOnLoaded("Blizzard_RaidUI") then
-            LoadAddOn("Blizzard_RaidUI")
-        end
 
+        if CompactRaidFrameContainer then
+            CompactRaidFrameContainer:ClearAllPoints()
+            CompactRaidFrameContainer:SetPoint("TOPLEFT", CompactRaidFrameManager, "TOPRIGHT", 0, -9)
+        end
         -- Set Blizzard Raid UI to shown
         if CompactRaidFrameManager_SetSetting then
 
@@ -148,7 +155,6 @@ f:RegisterEvent("GROUP_ROSTER_UPDATE") -- Triggered when group composition chang
 f:RegisterEvent("ADDON_LOADED") -- Triggered when the addon is loaded
 f:SetScript("OnEvent", function(self, event, arg1)
     if event == "ADDON_LOADED" and arg1 == "zindure-unit-frames" then
-        
         -- Initialize saved variables if they don't exist
         if ZUF_Settings == nil then
             if not ZUF_Defaults then
@@ -188,7 +194,7 @@ f:SetScript("OnEvent", function(self, event, arg1)
 
         if IsInRaid() and ZUF_Settings.raidFrameSettings.IsToggled then
             CreateRaidFrames()
-        else
+        elseif IsInGroup() then
             CreateFrames()
         end
         HideBlizzardFrames()

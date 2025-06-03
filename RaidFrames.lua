@@ -65,7 +65,7 @@ function CreateRaidUnitFrame(unit, index)
     -- Background
     frame.bg = frame:CreateTexture(nil, "BACKGROUND")
     frame.bg:SetAllPoints()
-    frame.bg:SetColorTexture(0.1, 0.1, 0.1, 0.8)
+    frame.bg:SetColorTexture(0.1, 0.1, 0.1, 1)
 
     -- Health bar
     frame.healthBar = CreateFrame("StatusBar", nil, frame)
@@ -292,7 +292,7 @@ function CreateRaidUnitFrame(unit, index)
                 self.healPredictionBar:SetValue(math.min(hp + heal, maxHp))
                 self.healPredictionBar:Show()
                 self.healPredictionBar:SetFrameLevel(self.healthBar:GetFrameLevel() - 1)
-                self.healPredictionBar:SetAlpha(0.6)
+                self.healPredictionBar:SetAlpha(1)
                 self.healPredictionBar:SetStatusBarColor(0, 1, 0, 0.4)
                 self.healthBar:SetFrameLevel(self.healPredictionBar:GetFrameLevel() + 1)
             else
@@ -338,7 +338,7 @@ function CreateRaidFrames()
             frame.powerBar:SetMinMaxValues(0, 1)
             frame.powerBar:SetValue(1)
             frame.powerBar:SetStatusBarColor(0.1, 0.1, 0.1)
-            frame:SetAlpha(0.5)
+            frame:SetAlpha(1)
         end
     end
     UpdateRaidFramePositions()
