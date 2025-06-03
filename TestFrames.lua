@@ -142,8 +142,10 @@ function HideTestFrames()
     for _, frame in ipairs(testFrames) do
         frame:Hide()
     end
-    for _, frame in ipairs(partyFrames) do
-        frame:Show()
+    if(IsInGroup() and not IsInRaid()) then
+        for _, frame in ipairs(partyFrames) do
+            frame:Show()
+        end
     end
     UpdateFramePositions()
 end

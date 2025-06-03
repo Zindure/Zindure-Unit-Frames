@@ -1,8 +1,6 @@
 ## Changelog
 
-- 🪲 Fixed many raid frame bugs
-- 🪲 Fixed party frame showing when solo
-- 🔧 Adjusted raid frame size
+- 🪲 Fixed party frame that was still showing when turning off party test frames
 
 ---
 
